@@ -34,7 +34,7 @@ on:
       pytest_command:
         description: 'Custom pytest command to run'
         required: false
-        default: 'python -m pytest tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
+        default: 'python -m pytest bayesflow/tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
         type: string
   pull_request:
     branches:
@@ -49,7 +49,7 @@ defaults:
 
 
 env:
-  DEFAULT_PYTEST_CMD: 'python -m pytest tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
+  DEFAULT_PYTEST_CMD: 'python -m pytest bayesflow/tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
 
 jobs:
   prepare-matrix:

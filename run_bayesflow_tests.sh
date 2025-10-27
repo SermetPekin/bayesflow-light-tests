@@ -95,7 +95,7 @@ OPTIONS:
     -r, --repo REPO          Repository to clone (default: ${DEFAULT_REPO})
     -b, --branch BRANCH      Branch to checkout (default: ${DEFAULT_BRANCH})
     -p, --python VERSION     Python version (default: ${DEFAULT_PYTHON_VERSION})
-    -k, --backend BACKEND    Keras backend (default: ${DEFAULT_BACKEND})
+    -k, --backend BACKEND    Keras backend: tensorflow, jax, torch/pytorch (default: ${DEFAULT_BACKEND})
     -t, --test-cmd CMD       Custom test command (default: approximator standardization test)
     -n, --venv-name NAME     Virtual environment name (default: ${VENV_NAME})
     -c, --cleanup            Clean up on exit
@@ -112,11 +112,14 @@ EXAMPLES:
     # Custom Python version and backend
     $0 -p 3.11.2 -k jax
 
+    # Test with PyTorch backend
+    $0 -k torch
+
     # Custom test command
     $0 -t "python -m pytest tests/ -v"
 
     # Full customization
-    $0 -r bayesflow-org/bayesflow -b main -p 3.10.8 -k tensorflow -v -c
+    $0 -r bayesflow-org/bayesflow -b main -p 3.10.8 -k jax -v -c
 
 EOF
 }
@@ -425,6 +428,11 @@ install_dependencies() {
     
     log "Installing BayesFlow and dependencies..."
     
+    # Get the absolute path to the virtual environment first (before changing directories)
+    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
+    local venv_path="$(cd "$script_dir" && pwd)/$VENV_NAME"
+    log_debug "Using virtual environment path: $venv_path"
+    
     # Change to BayesFlow directory
     if ! cd "$bayesflow_dir"; then
         log_error "Failed to change to BayesFlow directory: $bayesflow_dir"
@@ -437,11 +445,6 @@ install_dependencies() {
         exit 1
     fi
 
-    # Get the absolute path to the virtual environment (should be in the original script directory)
-    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
-    local venv_path="$(cd "$script_dir" && pwd)/$VENV_NAME"
-    log_debug "Using virtual environment path: $venv_path"
-
     # Install BayesFlow with all dependencies
     log "Installing BayesFlow with all dependencies..."
     if ! uv pip install --python "$venv_path" ".[all]"; then
@@ -450,13 +453,41 @@ install_dependencies() {
         exit 1
     fi
 
-    # Ensure TensorFlow is installed
-    log "Ensuring TensorFlow is properly installed..."
-    if ! uv pip install --python "$venv_path" tensorflow; then
-        log_error "Failed to install TensorFlow"
-        cd - >/dev/null
-        exit 1
-    fi
+    # Install backend-specific dependencies based on BACKEND variable
+    case "$BACKEND" in
+        "tensorflow")
+            log "Installing TensorFlow backend..."
+            if ! uv pip install --python "$venv_path" tensorflow; then
+                log_error "Failed to install TensorFlow"
+                cd - >/dev/null
+                exit 1
+            fi
+            ;;
+        "jax")
+            log "Installing JAX backend..."
+            if ! uv pip install --python "$venv_path" "jax[cpu]" jaxlib; then
+                log_error "Failed to install JAX"
+                cd - >/dev/null
+                exit 1
+            fi
+            ;;
+        "torch"|"pytorch")
+            log "Installing PyTorch backend..."
+            if ! uv pip install --python "$venv_path" torch; then
+                log_error "Failed to install PyTorch"
+                cd - >/dev/null
+                exit 1
+            fi
+            ;;
+        *)
+            log_warn "Unknown backend '$BACKEND', installing TensorFlow as fallback..."
+            if ! uv pip install --python "$venv_path" tensorflow; then
+                log_error "Failed to install TensorFlow"
+                cd - >/dev/null
+                exit 1
+            fi
+            ;;
+    esac
 
     # Ensure pytest is installed
     log "Ensuring pytest is properly installed..."
@@ -494,11 +525,30 @@ verify_environment() {
         exit 1
     fi
 
-    # Test TensorFlow import
-    if ! uv run --python "$venv_path" python -c "import tensorflow as tf; print(f'TensorFlow version: {tf.__version__}')"; then
-        log_error "Failed to import TensorFlow"
-        exit 1
-    fi
+    # Test backend-specific imports
+    case "$BACKEND" in
+        "tensorflow")
+            if ! uv run --python "$venv_path" python -c "import tensorflow as tf; print(f'TensorFlow version: {tf.__version__}')"; then
+                log_error "Failed to import TensorFlow"
+                exit 1
+            fi
+            ;;
+        "jax")
+            if ! uv run --python "$venv_path" python -c "import jax; import jaxlib; print(f'JAX version: {jax.__version__}, JAXlib version: {jaxlib.__version__}')"; then
+                log_error "Failed to import JAX"
+                exit 1
+            fi
+            ;;
+        "torch"|"pytorch")
+            if ! uv run --python "$venv_path" python -c "import torch; print(f'PyTorch version: {torch.__version__}')"; then
+                log_error "Failed to import PyTorch"
+                exit 1
+            fi
+            ;;
+        *)
+            log_warn "Unknown backend '$BACKEND', skipping backend-specific verification"
+            ;;
+    esac
 
     # Test pytest availability
     if ! uv run --python "$venv_path" python -c "import pytest; print(f'pytest version: {pytest.__version__}')"; then
@@ -525,31 +575,36 @@ run_tests() {
     
     log "Running tests with command: $TEST_CMD"
     
-    # Change to BayesFlow directory
-    if ! cd "$bayesflow_dir"; then
-        log_error "Failed to change to BayesFlow directory: $bayesflow_dir"
+    # Get the absolute path to the virtual environment 
+    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
+    local venv_path="$(cd "$script_dir" && pwd)/$VENV_NAME"
+    log_debug "Virtual environment path: $venv_path"
+    
+    # Verify that the BayesFlow directory exists
+    if [[ ! -d "$bayesflow_dir" ]]; then
+        log_error "BayesFlow directory not found: $bayesflow_dir"
         exit 1
     fi
 
     # Set environment variables
     export KERAS_BACKEND="$BACKEND"
+    
+    # Convert the test command to use full paths from root directory
+    local full_test_cmd="$TEST_CMD"
+    # Replace "tests/" with "external/bayesflow/tests/" 
+    full_test_cmd="${full_test_cmd//tests\//$bayesflow_dir/tests/}"
+    
+    log_debug "Modified test command: $full_test_cmd"
 
-    # Get the absolute path to the virtual environment
-    local script_dir="$(dirname "${BASH_SOURCE[0]}")"
-    local venv_path="$(cd "$script_dir" && pwd)/$VENV_NAME"
-
-    # Run tests
-    log "Executing: $TEST_CMD"
-    if uv run --python "$venv_path" $TEST_CMD; then
+    # Run tests from the root directory using full paths
+    log "Executing: $full_test_cmd"
+    if uv run --python "$venv_path" $full_test_cmd; then
         log "✅ Tests completed successfully!"
         test_result=0
     else
         log_error "Tests failed!"
         test_result=1
     fi
-
-    # Go back to original directory
-    cd - >/dev/null
 
     return $test_result
 }

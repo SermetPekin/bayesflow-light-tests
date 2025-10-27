@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Simple BayesFlow Test Runner
-# Usage: ./quick_test.sh [repo] [branch] [python_version]
+# Usage: ./quick_test.sh [repo] [branch] [python_version] [backend]
 
 set -e
 
@@ -9,13 +9,14 @@ set -e
 REPO="${1:-bayesflow-org/bayesflow}"
 BRANCH="${2:-main}"
 PYTHON_VERSION="${3:-3.10.8}"
-BACKEND="tensorflow"
+BACKEND="${4:-tensorflow}"
 VENV_NAME="bf-test"
 
 echo "🚀 Quick BayesFlow Test Setup"
 echo "Repository: $REPO"
 echo "Branch: $BRANCH" 
 echo "Python: $PYTHON_VERSION"
+echo "Backend: $BACKEND"
 echo ""
 
 # Install UV if needed
@@ -134,13 +135,34 @@ cd external/bayesflow
 VENV_PATH="$ROOT_DIR/$VENV_NAME"
 echo "Using virtual environment: $VENV_PATH"
 
-# Install using the virtual environment path
+# Install BayesFlow with all dependencies
 uv pip install --python "$VENV_PATH" ".[all]"
-uv pip install --python "$VENV_PATH" tensorflow
-uv pip install --python "$VENV_PATH" pytest  # Explicitly install pytest
+
+# Install backend-specific dependencies
+case "$BACKEND" in
+    "tensorflow")
+        echo "📦 Installing TensorFlow backend..."
+        uv pip install --python "$VENV_PATH" tensorflow
+        ;;
+    "jax")
+        echo "📦 Installing JAX backend..."
+        uv pip install --python "$VENV_PATH" "jax[cpu]" jaxlib
+        ;;
+    "torch"|"pytorch")
+        echo "📦 Installing PyTorch backend..."
+        uv pip install --python "$VENV_PATH" torch
+        ;;
+    *)
+        echo "⚠️  Unknown backend '$BACKEND', installing TensorFlow as fallback..."
+        uv pip install --python "$VENV_PATH" tensorflow
+        ;;
+esac
+
+# Always install pytest
+uv pip install --python "$VENV_PATH" pytest
 
 # Run test
-echo "🧪 Running test..."
+echo "🧪 Running test with $BACKEND backend..."
 export KERAS_BACKEND="$BACKEND"
 
 # Change back to root directory before running the test to ensure correct venv path

@@ -172,3 +172,21 @@ https://github.com/SermetPekin/bayesflow-light-tests/actions/runs/18851335808/jo
 ```
 
 ![Manual Testing for quick branch and versions](image.png)
+
+
+./run_bayesflow_tests.sh --backend jax --verbose
+
+```
+# Test with TensorFlow (default)
+./quick_test.sh
+
+# Test with JAX
+./quick_test.sh bayesflow-org/bayesflow main 3.11.2 jax
+
+# Test with PyTorch
+./quick_test.sh bayesflow-org/bayesflow main 3.11.2 torch
+
+# Test different branch
+./quick_test.sh your-username/bayesflow feature-branch 3.11.2 jax
+
+```

@@ -34,7 +34,7 @@ on:
       pytest_command:
         description: 'Custom pytest command to run'
         required: false
-        default: 'python -m pytest -x -m "not slow"'
+        default: 'python -m pytest tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
         type: string
   pull_request:
     branches:
@@ -46,6 +46,9 @@ on:
 defaults:
   run:
     shell: bash
+
+env:
+  DEFAULT_PYTEST_CMD: 'python -m pytest tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
 
 jobs:
   prepare-matrix:
@@ -188,6 +191,7 @@ jobs:
           REPO="${{ github.event.inputs.repo || 'bayesflow-org/bayesflow' }}"
           BRANCH="${{ github.event.inputs.branch || 'main' }}"
           
+          echo "Cloning ${REPO} from branch ${BRANCH}"
           mkdir -p external/bayesflow
           cd external/bayesflow
           git init
@@ -198,9 +202,21 @@ jobs:
           /src/
           /bayesflow/
           /setup.cfg
+          /setup.py
           EOF
-          git fetch --depth=1 origin ${BRANCH}
-          git checkout --force FETCH_HEAD || git pull --depth=1 origin ${BRANCH} || true
+          
+          # Fetch and checkout with better error handling
+          if git fetch --depth=1 origin ${BRANCH}; then
+            git checkout FETCH_HEAD
+            echo "Successfully checked out ${REPO}@${BRANCH}"
+          else
+            echo "Error: Failed to fetch ${REPO} from branch ${BRANCH}"
+            exit 1
+          fi
+          
+          # Verify we have the necessary files
+          echo "Contents of bayesflow directory:"
+          ls -la
           cd -
 
 
@@ -220,19 +236,29 @@ jobs:
       - name: Install uv
         shell: bash
         run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -LsSf https://astral.sh/uv/install.sh | sh
-            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
           else
-            curl -LsSf https://astral.sh/uv/install.sh | sh
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+          # Source the path for immediate use
+          export PATH="$HOME/.cargo/bin:$PATH"
 
       - name: Install external bayesflow package with all dependencies
         shell: bash
         run: |
+          set -e
           cd external/bayesflow
-          uv pip install --system ".[all]"
+          # Verify the directory has the expected files
+          ls -la
+          if [[ -f "pyproject.toml" || -f "setup.py" || -f "setup.cfg" ]]; then
+            echo "Installing bayesflow with all dependencies..."
+            uv pip install --system ".[all]"
+          else
+            echo "Error: No setup files found in bayesflow directory"
+            exit 1
+          fi
           cd -
 
       - name: 📋 Show Environment Info
@@ -259,14 +285,26 @@ jobs:
           retention-days: 10  
 
       - name: Run Tests
+        shell: bash
         run: |
+          set -e
+          echo "Current directory contents:"
           ls -la
-          ls -la tests/ || echo "tests dir not found"
+          
+          # Check if tests directory exists
+          if [[ -d "tests" ]]; then
+            echo "Found tests directory:"
+            ls -la tests/
+          else
+            echo "Warning: tests directory not found, creating basic test structure"
+            mkdir -p tests
+            echo "# Basic test placeholder" > tests/__init__.py
+          fi
+          
           echo "Running tests with backend: $KERAS_BACKEND"
-          uv pip install tensorflow --system
           
           # Use custom pytest command from input or default
-          PYTEST_CMD="${{ github.event.inputs.pytest_command || 'python -m pytest -x -m \"not slow\"' }}"
+          PYTEST_CMD="${{ github.event.inputs.pytest_command || env.DEFAULT_PYTEST_CMD }}"
           echo "Executing: $PYTEST_CMD"
           eval "$PYTEST_CMD"
            

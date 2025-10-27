@@ -6,6 +6,9 @@
 
 ```
 
+## reproduction of the error (python 3.10.8)
+```plaintext  
+
 python 3.10.8
 Failures 
 ubuntu 
@@ -17,5 +20,6 @@ https://github.com/SermetPekin/bayesflow-light-tests/actions/runs/18851262436/jo
 Windows 
 https://github.com/SermetPekin/bayesflow-light-tests/actions/runs/18851335808/job/53788438944
 
+```
 
 ![Manual Testing for quick branch and versions](image.png)

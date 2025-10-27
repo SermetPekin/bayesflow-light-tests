@@ -25,7 +25,6 @@ on:
           - ubuntu
           - windows
           - macos
-          - all
       backends:
         description: 'Backends to test (comma-separated)'
         required: true

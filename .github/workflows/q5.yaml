@@ -257,6 +257,12 @@ jobs:
           if [[ -f "pyproject.toml" || -f "setup.py" || -f "setup.cfg" ]]; then
             echo "Installing bayesflow with all dependencies..."
             uv pip install --system ".[all]"
+            
+            echo "Ensuring TensorFlow is properly installed..."
+            uv pip install --system tensorflow
+            
+            echo "Verifying TensorFlow installation..."
+            python -c "import tensorflow as tf; print(f'TensorFlow version: {tf.__version__}')"
           else
             echo "Error: No setup files found in bayesflow directory"
             exit 1

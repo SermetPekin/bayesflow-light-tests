@@ -34,7 +34,7 @@ on:
       pytest_command:
         description: 'Custom pytest command to run'
         required: false
-        default: 'python -m pytest external/bayesflow/tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
+        default: 'python -m pytest tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
         type: string
   pull_request:
     branches:
@@ -49,7 +49,7 @@ defaults:
 
 
 env:
-  DEFAULT_PYTEST_CMD: 'python -m pytest external/bayesflow/tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
+  DEFAULT_PYTEST_CMD: 'python -m pytest tests/test_approximators/test_approximator_standardization/test_approximator_standardization.py'
 
 jobs:
   prepare-matrix:
@@ -292,20 +292,22 @@ jobs:
           echo "Current directory contents:"
           ls -la
           
-          # Check if tests directory exists
-          if [[ -d "tests" ]]; then
-            echo "Found tests directory:"
-            ls -la tests/
+          echo "Checking external/bayesflow structure:"
+          if [[ -d "external/bayesflow" ]]; then
+            echo "Contents of external/bayesflow:"
+            ls -la external/bayesflow/
+            
+            echo "Changing to bayesflow directory to run tests..."
+            cd external/bayesflow
+            
+            echo "Running tests with backend: $KERAS_BACKEND"
+            
+            # Use custom pytest command from input or default
+            PYTEST_CMD="${{ github.event.inputs.pytest_command || env.DEFAULT_PYTEST_CMD }}"
+            echo "Executing: $PYTEST_CMD"
+            eval "$PYTEST_CMD"
           else
-            echo "Warning: tests directory not found, creating basic test structure"
-            mkdir -p tests
-            echo "# Basic test placeholder" > tests/__init__.py
+            echo "Error: external/bayesflow directory not found!"
+            exit 1
           fi
-          
-          echo "Running tests with backend: $KERAS_BACKEND"
-          
-          # Use custom pytest command from input or default
-          PYTEST_CMD="${{ github.event.inputs.pytest_command || env.DEFAULT_PYTEST_CMD }}"
-          echo "Executing: $PYTEST_CMD"
-          eval "$PYTEST_CMD"
            
